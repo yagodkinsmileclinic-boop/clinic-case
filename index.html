@@ -1907,6 +1907,7 @@ function answerFilled(block, ans){
   if(block.type === 'stages') return PJM_STAGES.some(s => (ans.stages&&ans.stages[s.id]||'').trim());
   if(block.type === 'list') return (ans.items||[]).some(x=>(x||'').trim());
   if(block.type === 'channels') return Object.values(ans.budgets||{}).some(v=>(v||'').toString().trim()) || Object.values(ans.reasons||{}).some(v=>(v||'').toString().trim());
+  if(BLOCK_SECTIONS[block.id]) return Object.values(ans.sections||{}).some(v=>(v||'').toString().trim()) || !!(ans.text||'').trim();
   if(BLOCK_CHOICES[block.id] && ans.choice) return true;
   return !!(ans.text||'').trim();
 }
@@ -2751,7 +2752,7 @@ function renderTutor(){
   '</div>';
   app.innerHTML = '<p style="margin-top:22px;color:var(--ink-soft);font-size:.9rem;">Обзор всех команд в реальном времени. Кликните команду, чтобы оценить блоки — ИИ предложит оценку с обоснованием, вы подтверждаете или меняете.</p>'+
     openAllRow+
-    '<div class="ovwrap"><table class="ovtbl" id="ovtbl"><thead><tr><th>Команда</th>'+BLOCKS.map(b=>'<th>'+(b.abbr||b.title.split(' ')[0])+'</th>').join('')+'<th>Будущее</th></tr></thead><tbody id="ovbody"></tbody></table></div>'+
+    '<div class="ovwrap"><table class="ovtbl" id="ovtbl"><thead><tr><th>Команда</th>'+BLOCKS.map(b=>'<th>'+(b.abbr||b.title.split(' ')[0])+'</th>').join('')+'</tr></thead><tbody id="ovbody"></tbody></table></div>'+
     '<div class="detail" id="detail"></div>';
   tutorUnsub = subscribeAllTeams(renderOverview);
 }
@@ -2783,33 +2784,12 @@ function renderOverview(map){
   body.innerHTML = SLUG_ORDER.map(slug=>{
     const c = CASES[slug];
     const team = map[slug];
-    const cl = CHECKLISTS[slug];
     const cells = BLOCKS.map(b=>{
       const ans = team?.answers?.[b.id] || {};
-      if(cl && cl[b.id]){
-        if(!ans.checklistReviewed) return '<td><span class="minichip none"></span></td>';
-        const checked = ans.checkedItems || {};
-        const its = cl[b.id];
-        const r = its.length ? its.filter(it=>checked[it.id]).length/its.length : 0;
-        const cls = r>=0.67?'strong':r>=0.34?'mid':'weak';
-        return '<td><span class="minichip '+cls+'"></span></td>';
-      }
-      if(cl) return '<td><span class="minichip none"></span></td>';
-      const t = ans.tutorTier;
-      return '<td><span class="minichip '+(t||'none')+'"></span></td>';
+      const cls = answerFilled(b, ans) ? 'strong' : 'weak';
+      return '<td><span class="minichip '+cls+'"></span></td>';
     }).join('');
-    let fate = '—';
-    if(team){
-      if(cl){
-        const {ratio, reviewedBlocks} = assembleChecklistFuture(slug, team);
-        if(reviewedBlocks) fate = tierLabel(ratio>=0.67?'strong':ratio>=0.34?'mid':'weak');
-      }else{
-        const {tier} = computeScenarioTier(slug, team.answers);
-        if(tier) fate = tierLabel(tier);
-      }
-    }
-    const revIcon = team && team.revealed ? '👁 ' : '';
-    return '<tr class="rowlink" onclick="openDetail(\''+slug+'\')"><td><div class="teamname">'+c.name+'</div><div class="teamcity">'+c.city+(team?'':' · нет данных')+'</div></td>'+cells+'<td>'+revIcon+fate+'</td></tr>';
+    return '<tr class="rowlink" onclick="openDetail(\''+slug+'\')"><td><div class="teamname">'+c.name+'</div><div class="teamcity">'+c.city+(team?'':' · нет данных')+'</div></td>'+cells+'</tr>';
   }).join('');
   if(tutorOpenSlug) openDetail(tutorOpenSlug, true);
 }
