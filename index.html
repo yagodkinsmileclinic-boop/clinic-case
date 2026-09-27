@@ -1926,6 +1926,17 @@ async function ensureTeam(slug){
     return snap.data();
   }
   if(remoteAvailable){
+    // Read-first: a plain 'get' is safe and side-effect-free. We only fall back to
+    // 'ensure' (which creates a blank skeleton on the server) when 'get' genuinely
+    // reports the team missing. Calling 'ensure' unconditionally on every page load
+    // was found to occasionally race on the server and overwrite an existing team's
+    // openBlocks/answers with a fresh blank skeleton — this avoids that entirely for
+    // any team that already exists (i.e. every team, once class has started).
+    const getResp = await remoteGet('action=get&slug='+encodeURIComponent(slug));
+    if(getResp && getResp.ok && getResp.team){
+      memStore[slug] = getResp.team; saveLocalStore(memStore);
+      return getResp.team;
+    }
     const skeleton = { caseId:slug, label:c.name, answers:blankAnswers(), revealed:false, openBlocks:{}, updatedAt:new Date().toISOString() };
     const resp = await remotePost({ action:'ensure', slug, skeleton });
     if(resp && resp.ok && resp.team){
@@ -2728,7 +2739,8 @@ function renderTutor(){
       b.id === 'metrics'
       ? ('<div style="display:flex;align-items:center;gap:4px;background:var(--surface);border-radius:10px;padding:4px;">'+
           '<span style="font-size:.74rem;color:var(--ink-soft);padding:0 4px;">'+(i+1)+'. '+(b.abbr||b.title.split(' ')[0])+'</span>'+
-          '<span style="font-size:.74rem;color:var(--strong);padding:5px 10px;">🔓 всегда открыто</span>'+
+          '<button type="button" class="link-btn" style="padding:5px 10px;" onclick="openBlockForAll(\''+b.id+'\', this)">открыть</button>'+
+          '<span style="font-size:.7rem;color:var(--strong);padding:5px 4px;">🔓 всегда открыто, закрыть нельзя</span>'+
         '</div>')
       : ('<div style="display:flex;align-items:center;gap:4px;background:var(--surface);border-radius:10px;padding:4px;">'+
           '<span style="font-size:.74rem;color:var(--ink-soft);padding:0 4px;">'+(i+1)+'. '+(b.abbr||b.title.split(' ')[0])+'</span>'+
