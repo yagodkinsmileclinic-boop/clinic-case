@@ -2442,7 +2442,7 @@ function renderTeamBlocks(slug, team){
     const task = c.tasks[b.id];
     const ans = team.answers?.[b.id] || {};
     const domId = 'block_'+b.id;
-    const released = !!(team.openBlocks && team.openBlocks[b.id]);
+    const released = b.id === 'metrics' ? true : !!(team.openBlocks && team.openBlocks[b.id]);
     if(!released){
       return '<div class="block" id="'+domId+'" style="opacity:.55;">'+
         '<div class="bh" style="cursor:default;">'+
@@ -2725,11 +2725,16 @@ function renderTutor(){
   const openAllRow = '<div style="display:flex;flex-wrap:wrap;gap:10px;margin:14px 0;padding:12px 14px;background:var(--surface-2);border-radius:12px;">'+
     '<div style="flex-basis:100%;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-faint);margin-bottom:2px;">Открыть / закрыть блок сразу всем командам</div>'+
     BLOCKS.map((b,i)=>
-      '<div style="display:flex;align-items:center;gap:4px;background:var(--surface);border-radius:10px;padding:4px;">'+
-        '<span style="font-size:.74rem;color:var(--ink-soft);padding:0 4px;">'+(i+1)+'. '+(b.abbr||b.title.split(' ')[0])+'</span>'+
-        '<button type="button" class="link-btn" style="padding:5px 10px;" onclick="openBlockForAll(\''+b.id+'\', this)">открыть</button>'+
-        '<button type="button" class="link-btn" style="padding:5px 10px;" onclick="closeBlockForAll(\''+b.id+'\', this)">закрыть</button>'+
-      '</div>'
+      b.id === 'metrics'
+      ? ('<div style="display:flex;align-items:center;gap:4px;background:var(--surface);border-radius:10px;padding:4px;">'+
+          '<span style="font-size:.74rem;color:var(--ink-soft);padding:0 4px;">'+(i+1)+'. '+(b.abbr||b.title.split(' ')[0])+'</span>'+
+          '<span style="font-size:.74rem;color:var(--strong);padding:5px 10px;">🔓 всегда открыто</span>'+
+        '</div>')
+      : ('<div style="display:flex;align-items:center;gap:4px;background:var(--surface);border-radius:10px;padding:4px;">'+
+          '<span style="font-size:.74rem;color:var(--ink-soft);padding:0 4px;">'+(i+1)+'. '+(b.abbr||b.title.split(' ')[0])+'</span>'+
+          '<button type="button" class="link-btn" style="padding:5px 10px;" onclick="openBlockForAll(\''+b.id+'\', this)">открыть</button>'+
+          '<button type="button" class="link-btn" style="padding:5px 10px;" onclick="closeBlockForAll(\''+b.id+'\', this)">закрыть</button>'+
+        '</div>')
     ).join('')+
   '</div>';
   app.innerHTML = '<p style="margin-top:22px;color:var(--ink-soft);font-size:.9rem;">Обзор всех команд в реальном времени. Кликните команду, чтобы оценить блоки — ИИ предложит оценку с обоснованием, вы подтверждаете или меняете.</p>'+
@@ -2750,6 +2755,7 @@ async function openBlockForAll(blockId, btn){
 }
 
 async function closeBlockForAll(blockId, btn){
+  if(blockId === 'metrics') return; // Блок 1 нельзя закрывать — всегда открыт
   if(btn){ btn.disabled = true; btn.dataset.orig = btn.textContent; btn.textContent = 'Закрываю…'; }
   await Promise.all(SLUG_ORDER.map(slug => patchTeam(slug, { openBlocks: { [blockId]: false } })));
   if(btn){
@@ -2831,8 +2837,10 @@ function renderDetailBlocks(slug, team){
     const tier = ans.tutorTier;
     const checklistItems = CHECKLISTS[slug] && CHECKLISTS[slug][b.id];
     const chip = chipHtml(slug, b.id, ans);
-    const released = !!(team.openBlocks && team.openBlocks[b.id]);
-    const openBtn = '<button type="button" class="link-btn" style="flex:none;font-size:.7rem;padding:5px 10px;'+(released?'border-color:var(--strong);color:var(--strong);':'')+'" onclick="event.stopPropagation();toggleBlockOpen(\''+slug+'\',\''+b.id+'\')">'+(released?'🔓 открыто для команды':'🔒 открыть для команды')+'</button>';
+    const released = b.id === 'metrics' ? true : !!(team.openBlocks && team.openBlocks[b.id]);
+    const openBtn = b.id === 'metrics'
+      ? '<span class="link-btn" style="flex:none;font-size:.7rem;padding:5px 10px;border-color:var(--strong);color:var(--strong);cursor:default;">🔓 всегда открыто</span>'
+      : '<button type="button" class="link-btn" style="flex:none;font-size:.7rem;padding:5px 10px;'+(released?'border-color:var(--strong);color:var(--strong);':'')+'" onclick="event.stopPropagation();toggleBlockOpen(\''+slug+'\',\''+b.id+'\')">'+(released?'🔓 открыто для команды':'🔒 открыть для команды')+'</button>';
     const ai = ans.aiTier ? ('<div class="ai-result"><b>Рекомендация: '+tierLabel(ans.aiTier)+'.</b> '+(ans.aiRationale||'')+'</div>') : '';
     const extra = taskExtraHtml(task, false, slug, b.id, ans);
     const forbidden = task.forbidden ? '<div class="forbidden">'+task.forbidden+'</div>' : '';
@@ -2888,6 +2896,7 @@ async function setTutorTier(slug, blockId, tier){
 }
 
 async function toggleBlockOpen(slug, blockId){
+  if(blockId === 'metrics') return; // Блок 1 нельзя закрывать — всегда открыт
   const team = await ensureTeam(slug);
   const cur = !!(team.openBlocks && team.openBlocks[blockId]);
   await patchTeam(slug, { openBlocks: { [blockId]: !cur } });
