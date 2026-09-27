@@ -1,7 +1,4 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<div id="static-copy-banner" style="position:sticky;top:0;z-index:9999;background:#4C6B4F;color:#fff;font:600 13px -apple-system,sans-serif;text-align:center;padding:8px 14px;line-height:1.4;">
-Это рабочая ссылка на тренажёр «Клиника-кейс» — сохранение ответов, синхронизация между устройствами и ИИ-рекомендации здесь работают без входа в аккаунт claude.ai.
-</div>
 <title>Клиника-кейс</title>
 <style>
   :root{
@@ -2025,21 +2022,21 @@ async function ensureTeam(slug){
     let snap;
     try{ snap = await ref.get(); }catch(e){ return null; }
     if(!snap.exists){
-      const skeleton = { caseId:slug, label:c.name, answers:blankAnswers(), revealed:false, updatedAt:new Date().toISOString() };
+      const skeleton = { caseId:slug, label:c.name, answers:blankAnswers(), revealed:false, openBlocks:{}, updatedAt:new Date().toISOString() };
       try{ await ref.set(skeleton); }catch(e){}
       return skeleton;
     }
     return snap.data();
   }
   if(remoteAvailable){
-    const skeleton = { caseId:slug, label:c.name, answers:blankAnswers(), revealed:false, updatedAt:new Date().toISOString() };
+    const skeleton = { caseId:slug, label:c.name, answers:blankAnswers(), revealed:false, openBlocks:{}, updatedAt:new Date().toISOString() };
     const resp = await remotePost({ action:'ensure', slug, skeleton });
     if(resp && resp.ok && resp.team){
       memStore[slug] = resp.team; saveLocalStore(memStore);
       return resp.team;
     }
   }
-  if(!memStore[slug]){ memStore[slug] = { caseId:slug, label:c.name, answers:blankAnswers(), revealed:false, updatedAt:new Date().toISOString() }; saveLocalStore(memStore); }
+  if(!memStore[slug]){ memStore[slug] = { caseId:slug, label:c.name, answers:blankAnswers(), revealed:false, openBlocks:{}, updatedAt:new Date().toISOString() }; saveLocalStore(memStore); }
   return memStore[slug];
 }
 
@@ -2409,8 +2406,10 @@ function route(){
   const app = document.getElementById('app');
   const modeTitle = document.getElementById('modeTitle');
   const tutorBtn = document.getElementById('tutorBtn');
+  const navBtn = document.getElementById('navBtn');
   const isTutor = tutorAuthed();
   if(tutorBtn) tutorBtn.style.display = isTutor ? '' : 'none';
+  if(navBtn) navBtn.style.display = isTutor ? '' : 'none';
   if(h.startsWith('team=')){
     const slug = h.slice(5);
     if(!CASES[slug]){ app.innerHTML = '<p style="margin-top:40px;color:var(--ink-faint);">Команда с таким адресом не найдена.</p>'; return; }
@@ -2553,9 +2552,19 @@ function renderTeamBlocks(slug, team){
   box.innerHTML = BLOCKS.map((b,i)=>{
     const task = c.tasks[b.id];
     const ans = team.answers?.[b.id] || {};
+    const domId = 'block_'+b.id;
+    const released = !!(team.openBlocks && team.openBlocks[b.id]);
+    if(!released){
+      return '<div class="block" id="'+domId+'" style="opacity:.55;">'+
+        '<div class="bh" style="cursor:default;">'+
+          '<div class="num">'+(i+1)+'</div>'+
+          '<div class="titles"><div class="tt">'+b.abbr+'</div><div class="ss">Заблокировано — откроет ведущий, когда дойдёт очередь</div></div>'+
+          '<div class="chev">🔒</div>'+
+        '</div>'+
+      '</div>';
+    }
     const extra = taskExtraHtml(task, true, slug, b.id, ans);
     const forbidden = task.forbidden ? '<div class="forbidden">'+task.forbidden+'</div>' : '';
-    const domId = 'block_'+b.id;
     const open = activeIds.has(domId) || i===0;
     const chip = chipHtml(slug, b.id, ans);
     let fieldsHtml = '';
@@ -2905,6 +2914,8 @@ function renderDetailBlocks(slug, team){
     const tier = ans.tutorTier;
     const checklistItems = CHECKLISTS[slug] && CHECKLISTS[slug][b.id];
     const chip = chipHtml(slug, b.id, ans);
+    const released = !!(team.openBlocks && team.openBlocks[b.id]);
+    const openBtn = '<button type="button" class="link-btn" style="flex:none;font-size:.7rem;padding:5px 10px;'+(released?'border-color:var(--strong);color:var(--strong);':'')+'" onclick="event.stopPropagation();toggleBlockOpen(\''+slug+'\',\''+b.id+'\')">'+(released?'🔓 открыто для команды':'🔒 открыть для команды')+'</button>';
     const ai = ans.aiTier ? ('<div class="ai-result"><b>Рекомендация: '+tierLabel(ans.aiTier)+'.</b> '+(ans.aiRationale||'')+'</div>') : '';
     const extra = taskExtraHtml(task, false, slug, b.id, ans);
     const forbidden = task.forbidden ? '<div class="forbidden">'+task.forbidden+'</div>' : '';
@@ -2940,7 +2951,7 @@ function renderDetailBlocks(slug, team){
         '<div class="bh" onclick="toggleBlock(\''+domId+'\')">'+
           '<div class="num">'+(i+1)+'</div>'+
           '<div class="titles"><div class="tt">'+b.title+'</div><div class="ss">'+b.short+'</div></div>'+
-          chip+'<div class="chev">›</div>'+
+          chip+openBtn+'<div class="chev">›</div>'+
         '</div>'+
         '<div class="body">'+
           '<div class="task-text">'+task.text+'</div>'+forbidden+extra+
@@ -2955,6 +2966,12 @@ function renderDetailBlocks(slug, team){
 
 async function setTutorTier(slug, blockId, tier){
   await patchTeam(slug, { answers: { [blockId]: { tutorTier: tier } } });
+}
+
+async function toggleBlockOpen(slug, blockId){
+  const team = await ensureTeam(slug);
+  const cur = !!(team.openBlocks && team.openBlocks[blockId]);
+  await patchTeam(slug, { openBlocks: { [blockId]: !cur } });
 }
 
 let aiLoading = {}, aiError = {}, aiBlocked = null;
