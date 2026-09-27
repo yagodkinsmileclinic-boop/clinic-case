@@ -2837,10 +2837,25 @@ let tutorUnsub = null, tutorOpenSlug = null;
 function renderTutor(){
   if(tutorUnsub) tutorUnsub();
   const app = document.getElementById('app');
+  const openAllRow = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0;padding:12px 14px;background:var(--surface-2);border-radius:12px;">'+
+    '<div style="flex-basis:100%;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-faint);margin-bottom:2px;">Открыть блок сразу всем командам</div>'+
+    BLOCKS.map((b,i)=>'<button type="button" class="link-btn" onclick="openBlockForAll(\''+b.id+'\', this)">'+(i+1)+'. '+(b.abbr||b.title.split(' ')[0])+'</button>').join('')+
+  '</div>';
   app.innerHTML = '<p style="margin-top:22px;color:var(--ink-soft);font-size:.9rem;">Обзор всех команд в реальном времени. Кликните команду, чтобы оценить блоки — ИИ предложит оценку с обоснованием, вы подтверждаете или меняете.</p>'+
+    openAllRow+
     '<div class="ovwrap"><table class="ovtbl" id="ovtbl"><thead><tr><th>Команда</th>'+BLOCKS.map(b=>'<th>'+(b.abbr||b.title.split(' ')[0])+'</th>').join('')+'<th>Будущее</th></tr></thead><tbody id="ovbody"></tbody></table></div>'+
     '<div class="detail" id="detail"></div>';
   tutorUnsub = subscribeAllTeams(renderOverview);
+}
+
+async function openBlockForAll(blockId, btn){
+  if(btn){ btn.disabled = true; btn.dataset.orig = btn.textContent; btn.textContent = 'Открываю…'; }
+  await Promise.all(SLUG_ORDER.map(slug => patchTeam(slug, { openBlocks: { [blockId]: true } })));
+  if(btn){
+    btn.disabled = false;
+    btn.textContent = '✓ открыто всем';
+    setTimeout(()=>{ if(btn && btn.dataset.orig) btn.textContent = btn.dataset.orig; }, 2500);
+  }
 }
 
 function renderOverview(map){
