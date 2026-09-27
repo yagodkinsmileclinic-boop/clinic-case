@@ -2193,6 +2193,7 @@ function chipHtml(slug, blockId, ans){
     const cls = items.length ? (found/items.length>=0.67?'strong':found/items.length>=0.34?'mid':'weak') : 'none';
     return '<span class="tierchip '+cls+'">'+found+'/'+items.length+'</span>';
   }
+  if(CHECKLISTS[slug]) return '';
   const tier = ans.tutorTier;
   return '<span class="tierchip '+(tier||'none')+'">'+(tier?tierLabel(tier):'не оценено')+'</span>';
 }
@@ -2917,6 +2918,7 @@ function renderOverview(map){
         const cls = r>=0.67?'strong':r>=0.34?'mid':'weak';
         return '<td><span class="minichip '+cls+'"></span></td>';
       }
+      if(cl) return '<td><span class="minichip none"></span></td>';
       const t = ans.tutorTier;
       return '<td><span class="minichip '+(t||'none')+'"></span></td>';
     }).join('');
@@ -2993,16 +2995,18 @@ function renderDetailBlocks(slug, team){
         '</div><div class="row1" style="margin-top:8px;"><button class="ai-btn" onclick="applyAiChecklist(\''+slug+'\',\''+b.id+'\')">Применить рекомендацию ИИ к галочкам</button></div>'
       ) : '';
       aiBoxInner = '<div class="row1"><button class="ai-btn" id="aibtn_'+b.id+'" onclick="runAIChecklist(\''+slug+'\',\''+b.id+'\')" '+(filled?'':'disabled')+'>'+(hasAi?'Пересчитать рекомендацию':'Проставить рекомендацию')+'</button></div>'+hint+errHtml+aiBlockHtml;
+    }else if(CHECKLISTS[slug]){
+      aiBoxInner = '<div class="ai-hint">Итог по этому блоку отдельно не считается — результат идёт по блоку «Показатели».</div>';
     }else{
       const hint = !filled ? '<div class="ai-hint">Кнопка включится, когда команда впишет ответ в этот блок.</div>' : '';
       const errHtml = aiError[b.id] ? '<div class="ai-error">'+aiError[b.id]+'</div>' : '';
       aiBoxInner = '<div class="row1"><button class="ai-btn" id="aibtn_'+b.id+'" onclick="runAI(\''+slug+'\',\''+b.id+'\')" '+(filled?'':'disabled')+'>'+(ans.aiTier?'Пересчитать рекомендацию':'Проставить рекомендацию')+'</button></div>'+hint+errHtml+ai;
     }
-    const gradingHtml = (b.id === 'strategy' && checklistItems) ? '' : (checklistItems ? checklistBoxHtml(slug, b.id, checklistItems, ans) : (
+    const gradingHtml = (b.id === 'strategy' && checklistItems) ? '' : (checklistItems ? checklistBoxHtml(slug, b.id, checklistItems, ans) : (CHECKLISTS[slug] ? '' : (
       '<div class="tierline"><span class="lbl">Оценка ведущего:</span>'+
         ['weak','mid','strong'].map(t=> '<button class="tier-btn" data-tier="'+t+'" data-active="'+(tier===t?1:0)+'" onclick="setTutorTier(\''+slug+'\',\''+b.id+'\',\''+t+'\')">'+tierLabel(t)+'</button>').join('')+
       '</div>'
-    ));
+    )));
     return (
       '<div class="block" id="'+domId+'" data-open="'+(open?1:0)+'">'+
         '<div class="bh" onclick="toggleBlock(\''+domId+'\')">'+
