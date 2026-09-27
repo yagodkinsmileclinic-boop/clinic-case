@@ -1919,16 +1919,48 @@ function loadLocalStore(){
 function saveLocalStore(store){
   try{ localStorage.setItem(LOCAL_STORE_KEY, JSON.stringify(store)); }catch(e){}
 }
-const memStore = loadLocalStore(); // fallback when db capability is unavailable — persisted to this browser's localStorage
+const memStore = loadLocalStore(); // локальный кэш на этот браузер — используется если сервер недоступен
+
+// ---------- remote backend (Google Apps Script + Google Sheet) ----------
+// Работает без входа в аккаунт claude.ai — обычный fetch() к публичному веб-приложению.
+// Одновременно служит "Планом Б": все данные лежат в Google-таблице напрямую.
+const REMOTE_API_URL = 'https://script.google.com/macros/s/AKfycbx2pZjETbb4I3lzuyzY0Fm4w1j5QXRsdr0I_IYJRRTJccCWcnCKCUsXj0kww1oIvPNS/exec';
+let remoteAvailable = false;
+async function remoteGet(qs){
+  try{
+    const res = await fetch(REMOTE_API_URL + '?' + qs, { method:'GET' });
+    if(!res.ok) return null;
+    return await res.json();
+  }catch(e){ return null; }
+}
+async function remotePost(body){
+  try{
+    const res = await fetch(REMOTE_API_URL, { method:'POST', body: JSON.stringify(body) });
+    if(!res.ok) return null;
+    return await res.json();
+  }catch(e){ return null; }
+}
+function mergeDeep_(dst, src){
+  for(const k in src){
+    if(src[k] && typeof src[k]==='object' && !Array.isArray(src[k])){ dst[k]=dst[k]||{}; mergeDeep_(dst[k], src[k]); }
+    else dst[k]=src[k];
+  }
+  return dst;
+}
 
 async function initCaps(){
   try{ dbCap = await claude.use?.("db") ?? null; }catch(e){ dbCap = null; }
   try{ sampleCap = await claude.use?.("sample") ?? null; }catch(e){ sampleCap = null; }
   dbReady = !!dbCap;
+  if(!dbCap){
+    const probe = await remoteGet('action=all');
+    remoteAvailable = !!(probe && probe.ok);
+  }
   const dot = document.getElementById('connDot'), txt = document.getElementById('connText');
   if(dot && txt){
-    dot.classList.toggle('on', dbReady);
-    txt.textContent = dbReady ? 'общее сохранение включено' : 'локальный режим (без общего сохранения)';
+    const online = dbReady || remoteAvailable;
+    dot.classList.toggle('on', online);
+    txt.textContent = dbReady ? 'общее сохранение включено' : (remoteAvailable ? 'общее сохранение включено (сервер)' : 'локальный режим (без общего сохранения)');
   }
 }
 
@@ -1999,13 +2031,20 @@ async function ensureTeam(slug){
       return skeleton;
     }
     return snap.data();
-  }else{
-    if(!memStore[slug]){ memStore[slug] = { caseId:slug, label:c.name, answers:blankAnswers(), revealed:false, updatedAt:new Date().toISOString() }; saveLocalStore(memStore); }
-    return memStore[slug];
   }
+  if(remoteAvailable){
+    const skeleton = { caseId:slug, label:c.name, answers:blankAnswers(), revealed:false, updatedAt:new Date().toISOString() };
+    const resp = await remotePost({ action:'ensure', slug, skeleton });
+    if(resp && resp.ok && resp.team){
+      memStore[slug] = resp.team; saveLocalStore(memStore);
+      return resp.team;
+    }
+  }
+  if(!memStore[slug]){ memStore[slug] = { caseId:slug, label:c.name, answers:blankAnswers(), revealed:false, updatedAt:new Date().toISOString() }; saveLocalStore(memStore); }
+  return memStore[slug];
 }
 
-let patchQueues = {}; // сериализуем записи по каждой команде — одна запись за раз, как требует db-капабилити
+let patchQueues = {}; // сериализуем записи по каждой команде — одна запись за раз
 function patchTeam(slug, patch){
   const prev = patchQueues[slug] || Promise.resolve();
   const run = prev.catch(()=>{}).then(async ()=>{
@@ -2016,12 +2055,22 @@ function patchTeam(slug, patch){
       }catch(e){
         return false;
       }
-    }else{
-      const t = memStore[slug]; if(!t) return false;
-      (function merge(dst, src){ for(const k in src){ if(src[k] && typeof src[k]==='object' && !Array.isArray(src[k])){ dst[k]=dst[k]||{}; merge(dst[k],src[k]); } else dst[k]=src[k]; } })(t, patch);
-      saveLocalStore(memStore);
-      return true;
     }
+    if(remoteAvailable){
+      const resp = await remotePost({ action:'patch', slug, patch });
+      if(resp && resp.ok){
+        const t = memStore[slug] || {};
+        mergeDeep_(t, patch);
+        t.updatedAt = (resp.team && resp.team.updatedAt) || new Date().toISOString();
+        memStore[slug] = t; saveLocalStore(memStore);
+        return true;
+      }
+      // сервер недоступен в эту секунду — пишем локально, чтобы не потерять ответ; следующий patch попробует снова
+    }
+    const t = memStore[slug]; if(!t) return false;
+    mergeDeep_(t, patch);
+    saveLocalStore(memStore);
+    return true;
   });
   patchQueues[slug] = run;
   return run;
@@ -2030,9 +2079,22 @@ function patchTeam(slug, patch){
 function subscribeTeam(slug, cb){
   if(dbCap){
     return dbCap.doc('teams/'+slug).onSnapshot(snap => { if(snap.exists) cb(snap.data()); }, ()=>{});
-  }else{
-    cb(memStore[slug]); return ()=>{};
   }
+  if(remoteAvailable){
+    let stopped = false, lastJson = null, timer = null;
+    async function poll(){
+      if(stopped) return;
+      const resp = await remoteGet('action=get&slug='+encodeURIComponent(slug));
+      if(resp && resp.ok && resp.team){
+        const j = JSON.stringify(resp.team);
+        if(j !== lastJson){ lastJson = j; memStore[slug] = resp.team; saveLocalStore(memStore); cb(resp.team); }
+      }
+      if(!stopped) timer = setTimeout(poll, 3000);
+    }
+    poll();
+    return ()=>{ stopped = true; if(timer) clearTimeout(timer); };
+  }
+  cb(memStore[slug]); return ()=>{};
 }
 
 function subscribeAllTeams(cb){
@@ -2040,9 +2102,22 @@ function subscribeAllTeams(cb){
     return dbCap.collection('teams').onSnapshot(qs => {
       const map = {}; qs.docs.forEach(d => map[d.id] = d.data()); cb(map);
     }, ()=>{});
-  }else{
-    cb(Object.assign({}, memStore)); return ()=>{};
   }
+  if(remoteAvailable){
+    let stopped = false, lastJson = null, timer = null;
+    async function poll(){
+      if(stopped) return;
+      const resp = await remoteGet('action=all');
+      if(resp && resp.ok && resp.teams){
+        const j = JSON.stringify(resp.teams);
+        if(j !== lastJson){ lastJson = j; cb(resp.teams); }
+      }
+      if(!stopped) timer = setTimeout(poll, 4000);
+    }
+    poll();
+    return ()=>{ stopped = true; if(timer) clearTimeout(timer); };
+  }
+  cb(Object.assign({}, memStore)); return ()=>{};
 }
 
 // ---------- helpers ----------
