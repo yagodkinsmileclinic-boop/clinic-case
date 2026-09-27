@@ -1995,22 +1995,18 @@ async function ensureTeam(slug){
     return snap.data();
   }
   if(remoteAvailable){
-    // Read-first: a plain 'get' is safe and side-effect-free. We only fall back to
-    // 'ensure' (which creates a blank skeleton on the server) when 'get' genuinely
-    // reports the team missing. Calling 'ensure' unconditionally on every page load
-    // was found to occasionally race on the server and overwrite an existing team's
-    // openBlocks/answers with a fresh blank skeleton — this avoids that entirely for
-    // any team that already exists (i.e. every team, once class has started).
+    // Read-first, and NO 'ensure' fallback at all anymore: 'ensure' creates/overwrites
+    // a blank skeleton on the server, and under heavy concurrent load (many teams'
+    // browsers polling at once) a transient failed 'get' was triggering 'ensure' and
+    // wiping real, already-submitted answers with a blank skeleton — confirmed live
+    // during class on 2026-09-27. Every real team already exists on the server by now
+    // (class is underway), so there is never a legitimate reason left this session to
+    // create/overwrite a row here. On any 'get' failure we just fall through to the
+    // local cache below instead of touching the server.
     const getResp = await remoteGet('action=get&slug='+encodeURIComponent(slug));
     if(getResp && getResp.ok && getResp.team){
       memStore[slug] = getResp.team; saveLocalStore(memStore);
       return getResp.team;
-    }
-    const skeleton = { caseId:slug, label:c.name, answers:blankAnswers(), revealed:false, openBlocks:{}, updatedAt:new Date().toISOString() };
-    const resp = await remotePost({ action:'ensure', slug, skeleton });
-    if(resp && resp.ok && resp.team){
-      memStore[slug] = resp.team; saveLocalStore(memStore);
-      return resp.team;
     }
   }
   if(!memStore[slug]){ memStore[slug] = { caseId:slug, label:c.name, answers:blankAnswers(), revealed:false, openBlocks:{}, updatedAt:new Date().toISOString() }; saveLocalStore(memStore); }
