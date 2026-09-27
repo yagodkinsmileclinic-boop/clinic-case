@@ -2053,6 +2053,7 @@ function answerFilled(block, ans){
   if(block.type === 'stages') return PJM_STAGES.some(s => (ans.stages&&ans.stages[s.id]||'').trim());
   if(block.type === 'list') return (ans.items||[]).some(x=>(x||'').trim());
   if(block.type === 'channels') return Object.values(ans.budgets||{}).some(v=>(v||'').toString().trim()) || Object.values(ans.reasons||{}).some(v=>(v||'').toString().trim());
+  if(BLOCK_CHOICES[block.id] && ans.choice) return true;
   return !!(ans.text||'').trim();
 }
 
