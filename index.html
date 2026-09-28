@@ -2907,8 +2907,15 @@ function renderTutor(){
         '</div>')
     ).join('')+
   '</div>';
+  const revealAllRow = '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:14px 0;padding:12px 14px;background:var(--surface-2);border-radius:12px;">'+
+    '<div style="flex-basis:100%;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-faint);margin-bottom:2px;">Будущее клиники — открыть сразу всем командам</div>'+
+    '<span style="font-size:.78rem;color:var(--ink-soft);">Каждая команда увидит своё будущее по тому, что уже оценено на этот момент — кто не успел закрыть все блоки, увидит частичный результат.</span>'+
+    '<button type="button" class="link-btn" style="padding:5px 12px;" onclick="revealFutureForAll(this)">показать будущее всем</button>'+
+    '<button type="button" class="link-btn" style="padding:5px 12px;" onclick="hideFutureForAll(this)">скрыть у всех</button>'+
+  '</div>';
   app.innerHTML = '<p style="margin-top:22px;color:var(--ink-soft);font-size:.9rem;">Обзор всех команд в реальном времени. Кликните команду, чтобы оценить блоки — ИИ предложит оценку с обоснованием, вы подтверждаете или меняете.</p>'+
     openAllRow+
+    revealAllRow+
     '<div class="ovwrap"><table class="ovtbl" id="ovtbl"><thead><tr><th>Команда</th>'+BLOCKS.map(b=>'<th>'+(b.abbr||b.title.split(' ')[0])+'</th>').join('')+'</tr></thead><tbody id="ovbody"></tbody></table></div>'+
     '<div class="detail" id="detail"></div>';
   tutorUnsub = subscribeAllTeams(renderOverview);
@@ -2933,6 +2940,30 @@ async function closeBlockForAll(blockId, btn){
     btn.textContent = '✓ закрыто всем';
     setTimeout(()=>{ if(btn && btn.dataset.orig) btn.textContent = btn.dataset.orig; }, 2500);
   }
+}
+
+async function revealFutureForAll(btn){
+  if(btn){ btn.disabled = true; btn.dataset.orig = btn.textContent; btn.textContent = 'Открываю…'; }
+  await Promise.all(SLUG_ORDER.map(slug => patchTeam(slug, { revealed: true })));
+  if(btn){
+    btn.disabled = false;
+    btn.textContent = '✓ открыто всем';
+    setTimeout(()=>{ if(btn && btn.dataset.orig) btn.textContent = btn.dataset.orig; }, 2500);
+  }
+  const rb = document.getElementById('revealToggleBtn');
+  if(rb) rb.textContent = '🔓 скрыть будущее от команды';
+}
+
+async function hideFutureForAll(btn){
+  if(btn){ btn.disabled = true; btn.dataset.orig = btn.textContent; btn.textContent = 'Скрываю…'; }
+  await Promise.all(SLUG_ORDER.map(slug => patchTeam(slug, { revealed: false })));
+  if(btn){
+    btn.disabled = false;
+    btn.textContent = '✓ скрыто у всех';
+    setTimeout(()=>{ if(btn && btn.dataset.orig) btn.textContent = btn.dataset.orig; }, 2500);
+  }
+  const rb = document.getElementById('revealToggleBtn');
+  if(rb) rb.textContent = '🔒 показать команде будущее';
 }
 
 function renderOverview(map){
