@@ -3000,7 +3000,7 @@ function renderDetailBlocks(slug, team){
       ) : '';
       aiBoxInner = '<div class="row1"><button class="ai-btn" id="aibtn_'+b.id+'" onclick="runAIChecklist(\''+slug+'\',\''+b.id+'\')" '+(filled?'':'disabled')+'>'+(hasAi?'Пересчитать рекомендацию':'Проставить рекомендацию')+'</button></div>'+hint+errHtml+aiBlockHtml;
     }else if(CHECKLISTS[slug]){
-      aiBoxInner = '<div class="ai-hint">Итог по этому блоку отдельно не считается — результат идёт по блоку «Показатели».</div>';
+      aiBoxInner = '';
     }else{
       const hint = !filled ? '<div class="ai-hint">Кнопка включится, когда команда впишет ответ в этот блок.</div>' : '';
       const errHtml = aiError[b.id] ? '<div class="ai-error">'+aiError[b.id]+'</div>' : '';
