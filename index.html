@@ -2338,6 +2338,7 @@ function taskExtraHtml(task, hideDiagnostics, slug, blockId, ans){
   if(task.table) extra += tableHtml(["Показатель","Норма","Факт"], task.table);
   if(task.channels) extra += marketingHtml(task.channels);
   if(task.channels && !hideDiagnostics) extra += marketingVerdictHtml(task.channels, slug, blockId, ans);
+  if(blockId === 'strategy' && !hideDiagnostics) extra += strategyRefHtml(slug, ans);
   if(task.reviews) extra += reviewsHtml(task.reviews);
   if(task.jobProfileExample) extra += jobProfileExampleHtml();
   if(task.note) extra += '<p style="font-size:.75rem;color:var(--ink-faint);margin-top:8px;">'+task.note+'</p>';
